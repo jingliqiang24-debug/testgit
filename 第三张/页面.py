@@ -1,6 +1,8 @@
 import os
 import streamlit as st
 from openai import OpenAI
+import datetime
+import json
 
 #系统提示词
 prompt  = """
@@ -20,14 +22,45 @@ st.set_page_config(
     initial_sidebar_state="expanded",
     menu_items={}
 )
+#保存会话
+def save_session():
 
-st.logo("./第三张/96cd3ea8-f37c-413e-996c-861720e8f187.png")
+    if st.session_state.current_session:
+        save_session_data ={
+            "nick_name": st.session_state.nick_name,
+            "nature": st.session_state.nature,
+            "current_time": datetime.datetime.now().isoformat(),
+            "message": st.session_state.messages,
+        }
+    if not os.path.exists("session_data"):
+        os.mkdir("session_data")
+    with open(f"session_data/{st.session_state.current_session}.json", "w", encoding="utf-8") as f:
+        json.dump(save_session_data, f, ensure_ascii=False,indent=2)
+#加载列表会话
+def load_session():
+    session_lists = []
+    if os.path.exists("session_data"):
+        file_list = os.listdir("session_data")
+        for filename in file_list:
+            if filename.endswith(".json"):
+                session_lists.append(filename[:-5])
+    return session_lists
+
+
+def load_sessions(session):
+    if os.path.exists(f"session_data/{session}.json"):
+        with open(f"session_data/{session}.json", "r", encoding="utf-8") as f:
+            json_data = json.load(f)
+            return json_data
 st.title("AI智能伴侣")
 
 if "nick_name" not in st.session_state:
     st.session_state.nick_name = "小甜甜"
 if "nature" not in st.session_state:
     st.session_state.nature = "活泼开朗"
+if "current_session" not in st.session_state:
+    now = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    st.session_state.current_session = now
 
 # 初始化 session_state 中的消息历史
 if "messages" not in st.session_state:
@@ -42,7 +75,49 @@ for message in st.session_state.messages:
     if message["role"] == "assistant":
         st.chat_message("assistant").write(message["content"])
 #侧边栏
+
+
+
 with st.sidebar:
+    st.subheader("AI控制按钮")
+
+
+    if st.button("新建会话",width="stretch"):
+        save_session()
+
+        if st.session_state.messages:
+            st.session_state.messages = [
+                {"role": "system", "content": prompt % (st.session_state.nick_name, st.session_state.nature)}
+            ]
+            st.session_state.current_session = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+            save_session()
+            st.rerun()
+    st.text("会话管理")
+    session_list = load_session()
+    for session in session_list:
+        col1, col2 = st.columns([4,1])
+        with col1:
+            if st.button(session,width="stretch",key= f"load_{session}"):
+                session_context = load_sessions(session)
+                st.session_state.nick_name = session_context["nick_name"]
+                st.session_state.nature = session_context["nature"]
+                st.session_state.messages = session_context["message"]
+                st.session_state.current_session = session
+                st.rerun()
+
+
+        with col2:
+           if st.button("",width="stretch",icon="❎",key= f"save_{session}"):
+               file_path = f"session_data/{session}.json"
+               if os.path.exists(file_path):
+                   os.remove(file_path)
+               if st.session_state.current_session == session:
+                   st.session_state.current_session = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+                   st.session_state.messages = [{"role":"system","content": prompt %(st.session_state.nick_name,st.session_state.nature)}]
+               st.rerun()
+
+
+
     st.subheader("详细信息")
     new_nick = st.text_input("昵称", placeholder="请输入昵称", value=st.session_state.nick_name)
     new_nature = st.text_area("性格", placeholder="请输入性格", value=st.session_state.nature)
@@ -75,7 +150,7 @@ if prompt:#字符串会自动转换为布尔值
 
 #添加到上下文
     st.session_state.messages.append({"role": "assistant", "content": f"{full_message}"})
-
+    save_session()
 
 
 
